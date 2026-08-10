@@ -1,0 +1,68 @@
+name: Build, attest, and release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches VERSION
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath './VERSION' -Raw).Trim()
+          $expectedTag = "v$version"
+          if ('${{ github.ref_name }}' -ne $expectedTag) {
+            throw "Tag '${{ github.ref_name }}' does not match VERSION '$expectedTag'."
+          }
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File './tests/Test-FilenameSuffixCleaner.ps1'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Tests failed with exit code $LASTEXITCODE."
+          }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File './tests/Test-ReleaseWorkflow.ps1'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Workflow compliance checks failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Build release package
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File './tools/Build-Release.ps1'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Build failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Write SHA256 checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem -LiteralPath './dist' -Filter '*.zip' -File |
+            Sort-Object Name |
+            ForEach-Object {
+              $hash = Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256
+              "$($hash.Hash)  $($_.Name)"
+            } | Set-Content -LiteralPath './dist/SHA256SUMS.txt' -Encoding ascii
+
+      - name: Attest final release assets
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/*'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

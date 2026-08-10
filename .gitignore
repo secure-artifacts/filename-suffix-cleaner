@@ -1,0 +1,10 @@
+# Build output
+dist/
+
+# Local test and editor files
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
