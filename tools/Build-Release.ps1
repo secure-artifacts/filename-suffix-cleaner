@@ -44,8 +44,13 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'src\Uninstall.ps1') -Destination
 
 $launcherDirectory = Join-Path $projectRoot 'launchers'
 Copy-Item -Path (Join-Path $launcherDirectory '*.cmd') -Destination $stageDirectory
-Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\用户说明.txt') `
-    -Destination (Join-Path $stageDirectory '使用说明.txt')
+
+$userGuide = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'docs') -File -Filter '*.txt' |
+    Select-Object -First 1
+if ($null -eq $userGuide) {
+    throw 'The release package requires one .txt user guide in docs.'
+}
+Copy-Item -LiteralPath $userGuide.FullName -Destination (Join-Path $stageDirectory 'user-guide.txt')
 
 Compress-Archive -Path (Join-Path $stageDirectory '*') -DestinationPath $zipPath -CompressionLevel Optimal
 Remove-Item -LiteralPath $stageDirectory -Recurse -Force
